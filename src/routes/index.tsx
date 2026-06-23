@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { ArrowRight, Sparkles, ShieldCheck, MapPinned, Star, Building2, Trees, KeyRound, Tags, TrendingUp } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { ArrowRight, Sparkles, ShieldCheck, MapPinned, Star, Building2, Trees, KeyRound, Tags, TrendingUp, Heart, Smartphone, Monitor, AlertCircle } from "lucide-react";
 import heroImg from "@/assets/hero-villa.jpg";
 import { SearchBar } from "@/components/SearchBar";
 import { PropertyCard } from "@/components/PropertyCard";
@@ -53,18 +53,15 @@ function HomePage() {
     },
   });
 
-  // Top up featured with demo so the section is never empty
   const liveFeatured = (liveProps ?? []).map((p) => ({ ...p, property_type: p.property_type as string, listing_type: p.listing_type as "buy" | "rent" }));
   const featured = liveFeatured.length >= 6
     ? liveFeatured.slice(0, 6)
     : [...liveFeatured, ...demoProperties.filter((d) => !liveFeatured.some((l) => l.title === d.title))].slice(0, 6);
 
-  // Curated location set per product requirements
   const FEATURED_CITIES = ["Mumbai", "Pune", "Bengaluru", "Goa"];
   const demoFallback: Record<string, string> = {};
   trendingLocations.forEach((l) => { demoFallback[l.city] = l.image; });
   const anyDemoImg = trendingLocations[0]?.image;
-
 
   return (
     <>
@@ -94,10 +91,10 @@ function HomePage() {
           </div>
 
           <div className="mt-10 flex flex-wrap gap-6 text-cream/90 animate-float-up" style={{ animationDelay: "240ms" }}>
-            <Stat k="50+" v="Verified listings" />
-            <Stat k="20+" v="Active cities" />
-            <Stat k="50+" v="Villas & estates" />
-            <Stat k="4.9★" v="Avg. rating" />
+            <Stat k="4.8★" v="Avg. rating" />
+            <Stat k="100%" v="Verified owners" />
+            <Stat k="<24h" v="Avg. response time" />
+            <Stat k="Zero" v="Brokerage fee" />
           </div>
         </div>
       </section>
@@ -275,9 +272,253 @@ function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* SUPPORT */}
+      <SupportSection />
     </>
   );
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   SUPPORT SECTION — UPI direct payment, no gateway
+   Layout: compact single card — header left, controls right on desktop
+   (desktop layout/behavior is unchanged from before).
+   Mobile  → stacked, full-width controls, instant window.location
+            redirect into the installed UPI app. NO QR ever rendered.
+   Desktop → dynamic QR appears inline below the button, fades + slides
+            in, and auto-regenerates whenever the amount changes.
+───────────────────────────────────────────────────────────────────── */
+
+const UPI_ID     = "kalpkothari14@oksbi";
+const UPI_NAME   = "EstateVerse%20Support";
+const PRESETS    = [49, 99, 199] as const;
+const MIN_AMOUNT = 10;
+
+function buildUpiLink(amount: number) {
+  return `upi://pay?pa=${UPI_ID}&pn=${UPI_NAME}&am=${amount}&cu=INR`;
+}
+
+function buildQrUrl(upiLink: string) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(upiLink)}&margin=10&format=png`;
+}
+
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function SupportSection() {
+  const [selected, setSelected]   = useState<number | null>(null);
+  const [custom, setCustom]       = useState("");
+  const [qrVisible, setQrVisible] = useState(false);
+  const [qrUrl, setQrUrl]         = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
+  const [mobile, setMobile]       = useState(false);
+
+  // resolve on client only — avoids SSR/hydration mismatch
+  useEffect(() => {
+    setMobile(isMobileDevice());
+  }, []);
+
+  const amount: number | null = (() => {
+    if (custom.trim() !== "") {
+      const n = parseFloat(custom);
+      return isNaN(n) ? null : n;
+    }
+    return selected;
+  })();
+
+  const valid = amount !== null && amount >= MIN_AMOUNT;
+
+  /* auto-refresh QR when amount changes after initial reveal */
+  useEffect(() => {
+    if (mobile || !qrVisible) return;
+    if (!valid || amount === null) { setQrUrl(null); return; }
+    setQrUrl(buildQrUrl(buildUpiLink(amount)));
+  }, [amount, valid, qrVisible, mobile]);
+
+  const pickPreset = (v: number) => {
+    setSelected(v); setCustom(""); setError(null);
+    setQrVisible(false); setQrUrl(null);
+  };
+
+  const onCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSelected(null); setCustom(e.target.value); setError(null);
+    setQrVisible(false); setQrUrl(null);
+  };
+
+  const handlePay = useCallback(() => {
+    if (!valid || amount === null) {
+      setError(`Please enter an amount of ₹${MIN_AMOUNT} or more.`);
+      return;
+    }
+    setError(null);
+    const link = buildUpiLink(amount);
+    if (mobile) {
+      window.location.href = link;
+    } else {
+      setQrUrl(buildQrUrl(link));
+      setQrVisible(true);
+    }
+  }, [valid, amount, mobile]);
+
+  return (
+    <section className="mx-auto mt-16 max-w-7xl px-4 pb-16 sm:mt-20 sm:px-6 sm:pb-20 lg:px-10">
+      <div className="overflow-hidden rounded-3xl border border-border bg-card sm:rounded-[2rem]">
+
+        {/* ── single row on desktop (unchanged), stacked on mobile ── */}
+        <div className="grid lg:grid-cols-[auto_1fr]">
+
+          {/* left — identity strip */}
+          <div className="gradient-forest px-6 py-7 text-cream sm:px-8 sm:py-8 lg:px-10 lg:py-10 flex flex-col justify-center lg:min-w-[260px] lg:max-w-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-cream/10 flex-shrink-0">
+                <Heart className="h-4 w-4 fill-gold text-gold" />
+              </span>
+              <span className="text-xs font-semibold uppercase tracking-widest text-gold">
+                Support
+              </span>
+            </div>
+            <h2 className="mt-4 font-display text-xl sm:text-2xl font-semibold leading-snug tracking-tight">
+              If you found this tool helpful or interesting, {" "}
+              <span className="italic text-gold">consider supporting its development.</span>
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-cream/70">
+              Paid directly via UPI — no account needed.
+            </p>
+          </div>
+
+          {/* right — controls */}
+          <div className="px-6 py-7 sm:px-8 sm:py-8 lg:px-10 lg:py-10">
+
+            {/* preset + custom + button — wraps on mobile, one row on desktop */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+
+              {/* preset pills */}
+              <div className="flex gap-2 sm:gap-3">
+                {PRESETS.map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => pickPreset(v)}
+                    className={[
+                      "flex-1 sm:flex-none rounded-full border px-4 sm:px-5 py-2.5 sm:py-2 font-display text-base font-semibold transition-all hover-lift",
+                      selected === v
+                        ? "bg-primary text-primary-foreground border-primary shadow-lift"
+                        : "border-border bg-background text-foreground hover:border-primary/50",
+                    ].join(" ")}
+                  >
+                    ₹{v}
+                  </button>
+                ))}
+              </div>
+
+              {/* custom input */}
+              <div className="flex flex-col gap-1">
+                <div className="relative w-full sm:w-32">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold text-muted-foreground">
+                    ₹
+                  </span>
+                  <input
+                    id="upi-custom"
+                    type="number"
+                    min={MIN_AMOUNT}
+                    step="1"
+                    inputMode="numeric"
+                    placeholder="Other"
+                    value={custom}
+                    onChange={onCustomChange}
+                    className={[
+                      "w-full rounded-full border bg-background py-2.5 sm:py-2 pl-7 pr-3 text-base font-medium",
+                      "placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors",
+                      error ? "border-destructive" : "border-border",
+                    ].join(" ")}
+                  />
+                </div>
+              </div>
+
+              {/* pay button */}
+              <Button
+                onClick={handlePay}
+                disabled={!valid}
+                className={[
+                  "h-11 sm:h-10 w-full sm:w-auto rounded-full px-6 text-sm font-semibold shadow-lift transition-all",
+                  valid
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "opacity-40 cursor-not-allowed",
+                ].join(" ")}
+              >
+                {mobile ? (
+                  <><Smartphone className="mr-1.5 h-3.5 w-3.5" />Pay {valid ? `₹${amount}` : "—"} via UPI</>
+                ) : (
+                  <><Monitor className="mr-1.5 h-3.5 w-3.5" />{qrVisible ? "Refresh QR" : "Show QR"}{valid ? ` — ₹${amount}` : ""}</>
+                )}
+              </Button>
+            </div>
+
+            {/* error */}
+            {error && (
+              <p className="mt-3 flex items-center gap-1.5 text-sm text-destructive">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />{error}
+              </p>
+            )}
+
+            {/* QR — inline, below controls, desktop only. Fade + slide-up entrance. */}
+            {!mobile && (
+              <div
+                className="grid transition-[grid-template-rows,opacity] duration-500 ease-out"
+                style={{
+                  gridTemplateRows: qrVisible && qrUrl ? "1fr" : "0fr",
+                  opacity: qrVisible && qrUrl ? 1 : 0,
+                }}
+                aria-hidden={!(qrVisible && qrUrl)}
+              >
+                <div className="overflow-hidden">
+                  {qrUrl && (
+                    <div
+                      className="mt-5 inline-flex items-center gap-6 rounded-2xl border border-border bg-background px-6 py-5 transition-all duration-500 ease-out"
+                      style={{
+                        transform: qrVisible ? "translateY(0)" : "translateY(12px)",
+                        opacity: qrVisible ? 1 : 0,
+                      }}
+                    >
+                      <img
+                        key={qrUrl}
+                        src={qrUrl}
+                        alt="UPI QR Code"
+                        width={180}
+                        height={180}
+                        className="rounded-xl flex-shrink-0"
+                      />
+                      <div className="flex flex-col">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                          Scan to pay
+                        </p>
+                        <p className="font-display text-4xl font-semibold text-foreground mt-1">
+                          ₹{amount}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">{UPI_ID}</p>
+                        <p className="text-xs text-muted-foreground mt-3">
+                          Open any UPI app → Scan → Confirm
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* disclaimer */}
+            <p className="mt-5 text-xs leading-relaxed text-muted-foreground border-t border-border pt-4">
+              Voluntary contribution · paid directly via UPI · not automatically verified · no purchase implied.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─── shared helpers (unchanged) ───────────────────────────────────── */
 
 function Stat({ k, v }: { k: string; v: string }) {
   return (
