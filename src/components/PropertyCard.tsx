@@ -24,9 +24,13 @@ export type PropertyCardData = {
 
 export function PropertyCard({ p, to }: { p: PropertyCardData; to?: string }) {
   const signed = useImageUrl(p.image ? null : p.cover_image_url ?? null);
+
+  const hasImage = Boolean(p.image || p.cover_image_url);
   const src = p.image ?? signed ?? "";
+
   const href = to ?? `/property/${p.id}`;
   const status = p.status ?? "available";
+
   const isActive =
     status === "available" ||
     status === "published" ||
@@ -58,6 +62,10 @@ export function PropertyCard({ p, to }: { p: PropertyCardData; to?: string }) {
               }`}
             />
           </>
+        ) : hasImage ? (
+          <div className="absolute inset-0 overflow-hidden bg-muted">
+            <div className="absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          </div>
         ) : (
           <div className="grid h-full place-items-center text-muted-foreground text-sm">
             No image
